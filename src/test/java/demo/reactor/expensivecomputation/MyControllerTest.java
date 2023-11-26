@@ -8,6 +8,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 @SpringBootTest
 class MyControllerTest {
 
@@ -19,27 +21,28 @@ class MyControllerTest {
 
     @Test
     void test() throws InterruptedException {
-        var exe = Executors.newVirtualThreadPerTaskExecutor();
+        var exe = Executors.newSingleThreadScheduledExecutor();
 
-        var bonjour = "bonjour";
-        var allo = "allo";
         var responses = new AtomicInteger();
 
-        var nbOfRequestsPerKey = 250;
+        var nbOfRequestsPerKey = 10;
         for (int i = 0; i < nbOfRequestsPerKey; i++) {
-            exe.submit(() -> myController.getValue(allo)
-                    .subscribe(j -> responses.incrementAndGet()));
-            exe.submit(() -> myController.getValue(bonjour)
-                    .subscribe(j -> responses.incrementAndGet()));
+            exe.schedule(() -> myController.getValue("allo")
+                            .subscribe(j -> responses.incrementAndGet()),
+                    i,
+                    MILLISECONDS);
+//            exe.schedule(() -> myController.getValue("bonjour")
+//                            .subscribe(j -> responses.incrementAndGet()),
+//                    i + nbOfRequestsPerKey,
+//                    MILLISECONDS);
         }
-//        allos.add(myController.getValue("allo").block());
-//        bonjours.add(myController.getValue("bonjour").block());
-        Thread.sleep(10_000);
+        System.out.println("Done scheduling requests");
+        Thread.sleep(5_000);
 
         System.out.printf("Computation map: %s%n", manager.getComputationMap().keySet());
         var soft = new SoftAssertions();
         soft.assertThat(manager.getComputationMap().keySet()).isEmpty();
-        soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey * 2);
+        soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey * 1);
         soft.assertAll();
         exe.shutdown();
     }
