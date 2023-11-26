@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
@@ -32,10 +33,18 @@ class MyController {
 
     private final ExpensiveComputationManager expensiveComputationManager;
 
+    private final AtomicInteger nbRequests = new AtomicInteger(0);
+
     @GetMapping("{text}")
     public Integer getValue(@PathVariable("text") String text) {
+        nbRequests.incrementAndGet();
         return expensiveComputationManager.performExpensiveComputation(text);
 //                .doOnNext(i -> System.out.printf("next result: %d%n", i));
+    }
+
+    @GetMapping("count")
+    public Integer getRequestCount() {
+        return nbRequests.get();
     }
 
 }
@@ -78,9 +87,9 @@ class ExpensiveComputationManager {
 
     @SneakyThrows
     private Integer theActualComputation(String key) {
-        log.info("START computing");
-        Thread.sleep(200);
-        log.info("END   computing");
+        log.info("START computing {}", key);
+        Thread.sleep(4000);
+        log.info("END   computing {}", key);
         return key.length();
     }
 
