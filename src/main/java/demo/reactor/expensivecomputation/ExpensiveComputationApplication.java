@@ -1,20 +1,20 @@
 package demo.reactor.expensivecomputation;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
+
+import static java.util.Optional.ofNullable;
+import static java.util.concurrent.CompletableFuture.supplyAsync;
 
 
 @SpringBootApplication
@@ -33,7 +33,7 @@ class MyController {
     private final ExpensiveComputationManager expensiveComputationManager;
 
     @GetMapping("{text}")
-    public Mono<Integer> getValue(@PathVariable("text") String text) {
+    public Integer getValue(@PathVariable("text") String text) {
         return expensiveComputationManager.performExpensiveComputation(text);
 //                .doOnNext(i -> System.out.printf("next result: %d%n", i));
     }
@@ -42,40 +42,46 @@ class MyController {
 
 @Service
 @Getter
+@Slf4j
 class ExpensiveComputationManager {
-    private final ConcurrentMap<String, Mono<Integer>> computationMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Info> computationMap = new ConcurrentHashMap<>();
 
-    public Mono<Integer> performExpensiveComputation(String key) {
-        return computationMap
-                .computeIfAbsent(key, k -> theActualComputation(key));
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    private static class Info {
+        private int subscriberCount;
+        private CompletableFuture<Integer> value;
     }
 
-    private Mono<Integer> theActualComputation(String key) {
-        return Mono.just(getIntegerMono(key))
-                .subscribeOn(Schedulers.boundedElastic())
-                .doOnSuccess(result -> computationMap.remove(key));
-    }
-
-    private static Integer getIntegerMono(String key) {
-        // Replace this with your actual expensive computation logic
-        simulateSlowAPICall(3000);
-        return key.length();
-    }
-
-    public static void simulateSlowAPICall(int delayInMillis) {
-        System.out.println("Simulating a slow API call...");
-        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-            // Simulate a delay
-            try {
-                TimeUnit.MILLISECONDS.sleep(delayInMillis);
-                System.out.println("Slow API call completed!");
-            } catch (InterruptedException e) {
-                System.out.println("Interrupted while simulating the API call");
-                Thread.currentThread().interrupt();
+    public Integer performExpensiveComputation(String key) {
+        Integer join = computationMap
+                .compute(key, (k, v) -> ofNullable(v)
+                        .map(i -> {
+                            i.setSubscriberCount(i.getSubscriberCount() + 1);
+                            return i;
+                        })
+                        .orElseGet(() -> new Info(1, supplyAsync(() -> theActualComputation(key)))))
+                .getValue()
+                .join();
+        // how do I remove the entry from the Map safely?
+        computationMap.computeIfPresent(key, (k, v) -> {
+            if (v.getSubscriberCount() - 1 < 1) {
+                return null;
             }
+            v.setSubscriberCount(v.getSubscriberCount() - 1);
+            return v;
         });
+        return join;
+    }
 
-        future.join(); // Wait for the CompletableFuture to complete
+    @SneakyThrows
+    private Integer theActualComputation(String key) {
+        log.info("START computing");
+        Thread.sleep(200);
+        log.info("END   computing");
+        return key.length();
     }
 
 }

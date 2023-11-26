@@ -21,14 +21,17 @@ class MyControllerTest {
 
     @Test
     void test() throws InterruptedException {
-        var exe = Executors.newSingleThreadScheduledExecutor();
+        var exe = Executors.newScheduledThreadPool(10);
 
         var responses = new AtomicInteger();
 
-        var nbOfRequestsPerKey = 10;
+        var nbOfRequestsPerKey = 200;
         for (int i = 0; i < nbOfRequestsPerKey; i++) {
-            exe.schedule(() -> myController.getValue("allo")
-                            .subscribe(j -> responses.incrementAndGet()),
+            exe.schedule(() -> {
+                        Integer allo = myController.getValue("allo");
+                        responses.incrementAndGet();
+//                                .subscribe(j -> responses.incrementAndGet())
+                    },
                     i,
                     MILLISECONDS);
 //            exe.schedule(() -> myController.getValue("bonjour")
