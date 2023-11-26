@@ -17,7 +17,7 @@ class MyControllerTest {
     private MyController myController;
 
     @Autowired
-    private ExpensiveComputationManager manager;
+    private StringLengthComputationManager manager;
 
     @Test
     void test() throws InterruptedException {
@@ -45,7 +45,7 @@ class MyControllerTest {
         System.out.printf("Computation map: %s%n", manager.getComputationMap().keySet());
         var soft = new SoftAssertions();
         soft.assertThat(manager.getComputationMap().keySet()).isEmpty();
-        soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey * 1);
+        soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey);
         soft.assertAll();
         exe.shutdown();
     }
