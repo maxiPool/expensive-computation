@@ -1,10 +1,12 @@
 package demo.reactor.expensivecomputation;
 
+import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @SpringBootTest
 class MyControllerTest {
@@ -17,17 +19,28 @@ class MyControllerTest {
 
     @Test
     void test() throws InterruptedException {
-        var exe = Executors.newFixedThreadPool(6);
+        var exe = Executors.newVirtualThreadPerTaskExecutor();
 
-        for (int i = 0; i < 5; i++) {
-            exe.submit(() -> myController.getValue("allo").subscribe());
-            exe.submit(() -> myController.getValue("bonjour").subscribe());
+        var bonjour = "bonjour";
+        var allo = "allo";
+        var responses = new AtomicInteger();
+
+        var nbOfRequestsPerKey = 250;
+        for (int i = 0; i < nbOfRequestsPerKey; i++) {
+            exe.submit(() -> myController.getValue(allo)
+                    .subscribe(j -> responses.incrementAndGet()));
+            exe.submit(() -> myController.getValue(bonjour)
+                    .subscribe(j -> responses.incrementAndGet()));
         }
-        myController.getValue("allo").block();
-        myController.getValue("bonjour").block();
+//        allos.add(myController.getValue("allo").block());
+//        bonjours.add(myController.getValue("bonjour").block());
+        Thread.sleep(10_000);
 
         System.out.printf("Computation map: %s%n", manager.getComputationMap().keySet());
-
+        var soft = new SoftAssertions();
+        soft.assertThat(manager.getComputationMap().keySet()).isEmpty();
+        soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey * 2);
+        soft.assertAll();
         exe.shutdown();
     }
 

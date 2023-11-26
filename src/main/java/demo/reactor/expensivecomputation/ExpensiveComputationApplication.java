@@ -13,6 +13,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
 
 
 @SpringBootApplication
@@ -32,8 +33,8 @@ class MyController {
 
     @GetMapping("{text}")
     public Mono<Integer> getValue(@PathVariable("text") String text) {
-        return expensiveComputationManager.performExpensiveComputation(text)
-                .doOnNext(i -> System.out.printf("next result: %d%n", i));
+        return expensiveComputationManager.performExpensiveComputation(text);
+//                .doOnNext(i -> System.out.printf("next result: %d%n", i));
     }
 
 }
@@ -58,7 +59,7 @@ class ExpensiveComputationManager {
             Thread.currentThread().interrupt();
         }
         return Mono.just(key.length())
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(Schedulers.fromExecutorService(Executors.newVirtualThreadPerTaskExecutor()))
                 .doOnSuccess(result -> computationMap.remove(key));
     }
 }
