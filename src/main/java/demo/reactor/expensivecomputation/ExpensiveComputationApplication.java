@@ -73,22 +73,11 @@ abstract class AbstractExpensiveComputationManager<S, T> {
   public T compute(Supplier<T> expensiveComputation, S key) {
     return computationMap
         .compute(key, (k, v) -> ofNullable(v)
-            .orElseGet(() -> new AsyncComputation<T>(expensiveComputation)))
-        .getValue()
+            .orElseGet(() -> supplyAsync(expensiveComputation)))
         .exceptionally(throwable -> {
           throw new RuntimeException(throwable);
         })
         .whenComplete((result, ex) -> computationMap.remove(key))
         .join();
   }
-
-  private static class AsyncComputation<T> {
-    @Getter
-    private final CompletableFuture<T> value;
-
-    AsyncComputation(Supplier<T> supplier) {
-      this.value = supplyAsync(supplier);
-    }
-  }
-
 }
