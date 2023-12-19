@@ -2,9 +2,8 @@ package demo.reactor.expensivecomputation;
 
 import lombok.SneakyThrows;
 import org.assertj.core.api.SoftAssertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
@@ -17,14 +16,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
 class MyControllerTest {
 
-  @Autowired
-  private MyController myController;
-
-  @Autowired
   private StringLengthComputationManager manager;
+
+  @BeforeEach
+  void beforeEach() {
+    manager = new StringLengthComputationManager();
+  }
 
   @Test
   void test() throws InterruptedException {
@@ -65,7 +64,7 @@ class MyControllerTest {
 
     var assertTwo = assertOne
         .thenCompose(result -> runAsync(() -> {
-          getSneakySleep(50); // Sleep for 0.1 second (100 milliseconds)
+          getSneakySleep(50);
           assertThatThrownBy(
               () -> manager.performExpensiveComputation(MyControllerTest::computationThatWillFail, "it will fail"))
               .isInstanceOf(CompletionException.class)
