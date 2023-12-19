@@ -70,37 +70,24 @@ class StringLengthComputationManager extends AbstractExpensiveComputationManager
 abstract class AbstractExpensiveComputationManager<S, T> {
   private final ConcurrentMap<S, ComputationSubscriber<T>> computationMap = new ConcurrentHashMap<>();
 
-  public T performExpensiveComputation(Supplier<T> expensiveComputation, S key) {
+  public T compute(Supplier<T> expensiveComputation, S key) {
     return computationMap
         .compute(key, (k, v) -> ofNullable(v)
-            .map(ComputationSubscriber::addSubscriber)
-            .orElseGet(() -> new ComputationSubscriber<T>(expensiveComputation)))
+            .orElseGet(() -> new AsyncComputation<T>(expensiveComputation)))
         .getValue()
         .exceptionally(throwable -> {
           throw new RuntimeException(throwable);
         })
-        .whenComplete((result, ex) -> computationMap.computeIfPresent(key, (k, v) -> v.removeSubscriber()))
+        .whenComplete((result, ex) -> computationMap.remove(key))
         .join();
   }
 
-  private static class ComputationSubscriber<T> {
-    private int subscriberCount;
+  private static class AsyncComputation<T> {
     @Getter
     private final CompletableFuture<T> value;
 
-    ComputationSubscriber(Supplier<T> supplier) {
+    AsyncComputation(Supplier<T> supplier) {
       this.value = supplyAsync(supplier);
-      subscriberCount = 1;
-    }
-
-    ComputationSubscriber<T> addSubscriber() {
-      subscriberCount++;
-      return this;
-    }
-
-    @Nullable
-    ComputationSubscriber<T> removeSubscriber() {
-      return --subscriberCount < 1 ? null : this;
     }
   }
 
