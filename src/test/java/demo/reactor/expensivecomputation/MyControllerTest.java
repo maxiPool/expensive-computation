@@ -26,21 +26,23 @@ class MyControllerTest {
   }
 
   @Test
-  void test() throws InterruptedException {
+  void should_computeOnceForManyComputationRequests() {
     try (var exe = Executors.newScheduledThreadPool(10)) {
-
       var responses = new AtomicInteger();
 
-      var nbOfRequestsPerKey = 200;
-      for (int i = 0; i < nbOfRequestsPerKey; i++) {
+      for (int i = 0; i < 200; i++) {
         exe.schedule(() -> {
-          responses.incrementAndGet();
+          manager.performExpensiveComputation(() -> {
+            sleepSneaky(500);
+            responses.incrementAndGet();
+            return "hello".length();
+          }, "hello");
         }, i, MILLISECONDS);
       }
-      sleep(5_000);
+      sleepSneaky(600);
 
       var soft = new SoftAssertions();
-      soft.assertThat(responses.get()).isEqualTo(nbOfRequestsPerKey);
+      soft.assertThat(responses.get()).isEqualTo(1);
       soft.assertAll();
     }
   }
@@ -64,7 +66,7 @@ class MyControllerTest {
 
     var assertTwo = assertOne
         .thenCompose(result -> runAsync(() -> {
-          getSneakySleep(50);
+          sleepSneaky(50);
           assertThatThrownBy(
               () -> manager.performExpensiveComputation(MyControllerTest::computationThatWillFail, "it will fail"))
               .isInstanceOf(CompletionException.class)
@@ -75,12 +77,12 @@ class MyControllerTest {
   }
 
   private static Integer computationThatWillFail() {
-    getSneakySleep(200);
+    sleepSneaky(200);
     throw new IllegalStateException("Something wrong!");
   }
 
   @SneakyThrows
-  private static void getSneakySleep(int ms) {
+  private static void sleepSneaky(int ms) {
     sleep(ms);
   }
 
