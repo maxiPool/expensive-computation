@@ -32,7 +32,7 @@ class MyControllerTest {
 
       for (int i = 0; i < 200; i++) {
         exe.schedule(() -> {
-          manager.performExpensiveComputation(() -> {
+          manager.compute(() -> {
             sleepSneaky(500);
             responses.incrementAndGet();
             return "hello".length();
@@ -50,17 +50,17 @@ class MyControllerTest {
   @Test
   void should_evictCache_whenExceptionThrownBySupplierAndAllSubscribersAreDone() {
     assertThatThrownBy(
-        () -> manager.performExpensiveComputation(MyControllerTest::computationThatWillFail, "it will fail"))
+        () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
         .isInstanceOf(CompletionException.class)
         .hasCauseExactlyInstanceOf(RuntimeException.class);
     assertThatNoException().isThrownBy(
-        () -> manager.performExpensiveComputation("it will fail"::length, "it will fail"));
+        () -> manager.compute("it will fail"::length, "it will fail"));
   }
 
   @Test
   void should_useExceptionForAllSubscribersThatAreWaiting() {
     var assertOne = runAsync(() -> assertThatThrownBy(
-        () -> manager.performExpensiveComputation(MyControllerTest::computationThatWillFail, "it will fail"))
+        () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
         .isInstanceOf(CompletionException.class)
         .hasCauseExactlyInstanceOf(RuntimeException.class));
 
@@ -68,7 +68,7 @@ class MyControllerTest {
         .thenCompose(result -> runAsync(() -> {
           sleepSneaky(50);
           assertThatThrownBy(
-              () -> manager.performExpensiveComputation(MyControllerTest::computationThatWillFail, "it will fail"))
+              () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
               .isInstanceOf(CompletionException.class)
               .hasCauseExactlyInstanceOf(RuntimeException.class);
         }));
