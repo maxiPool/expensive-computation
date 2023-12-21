@@ -4,25 +4,26 @@ import lombok.SneakyThrows;
 import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.lang.Thread.sleep;
-import static java.util.concurrent.CompletableFuture.allOf;
-import static java.util.concurrent.CompletableFuture.runAsync;
+import static java.util.concurrent.CompletableFuture.supplyAsync;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.assertj.core.api.Assertions.assertThatNoException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.*;
 
-class MyControllerTest {
+class AsyncCacheTest {
 
-  private StringLengthComputationManager manager;
+  private StringLengthAsyncCache asyncCache;
 
   @BeforeEach
   void beforeEach() {
-    manager = new StringLengthComputationManager();
+    asyncCache = new StringLengthAsyncCache();
   }
 
   @Test
@@ -32,11 +33,11 @@ class MyControllerTest {
 
       for (int i = 0; i < 200; i++) {
         exe.schedule(() -> {
-          manager.compute(() -> {
+          asyncCache.compute("hello", () -> {
             sleepSneaky(500);
             responses.incrementAndGet();
             return "hello".length();
-          }, "hello");
+          });
         }, i, MILLISECONDS);
       }
       sleepSneaky(600);
@@ -49,31 +50,36 @@ class MyControllerTest {
 
   @Test
   void should_evictCache_whenExceptionThrownBySupplierAndAllSubscribersAreDone() {
+    var key = "it will maybe fail";
     assertThatThrownBy(
-        () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
+        () -> asyncCache.compute(key, AsyncCacheTest::computationThatWillFail))
         .isInstanceOf(CompletionException.class)
         .hasCauseExactlyInstanceOf(RuntimeException.class);
     assertThatNoException().isThrownBy(
-        () -> manager.compute("it will fail"::length, "it will fail"));
+        () -> asyncCache.compute(key, key::length));
   }
 
   @Test
-  void should_useExceptionForAllSubscribersThatAreWaiting() {
-    var assertOne = runAsync(() -> assertThatThrownBy(
-        () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
-        .isInstanceOf(CompletionException.class)
-        .hasCauseExactlyInstanceOf(RuntimeException.class));
+  void should_useSameExceptionForAllSubscribersThatAreWaiting() {
+    var key = "should_useSameExceptionForAllSubscribersThatAreWaiting";
 
-    var assertTwo = assertOne
-        .thenCompose(result -> runAsync(() -> {
-          sleepSneaky(50);
-          assertThatThrownBy(
-              () -> manager.compute(MyControllerTest::computationThatWillFail, "it will fail"))
-              .isInstanceOf(CompletionException.class)
-              .hasCauseExactlyInstanceOf(RuntimeException.class);
-        }));
+    // noinspection unchecked
+    var computationMap = (ConcurrentMap<String, CompletableFuture<Integer>>) ReflectionTestUtils.getField(asyncCache, "computationMap");
+    assertThat(computationMap).isNotNull();
 
-    allOf(assertOne, assertTwo);
+    var exception = new IllegalStateException("Something wrong!");
+    computationMap.put(key, supplyAsync(() -> {
+      throw exception;
+    }));
+
+    assertThatThrownBy(
+        () -> asyncCache.compute(key, () -> {
+          throw new NullPointerException("Shouldn't be here!");
+        }))
+        .rootCause()
+        .isSameAs(exception)
+        .isNotInstanceOf(NullPointerException.class)
+        .hasMessageNotContaining("Shouldn't be here!");
   }
 
   private static Integer computationThatWillFail() {

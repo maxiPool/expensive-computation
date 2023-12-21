@@ -1,13 +1,10 @@
 package demo.reactor.expensivecomputation;
 
-import jakarta.annotation.Nullable;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,7 +15,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
-import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
 
 
@@ -36,15 +32,14 @@ public class ExpensiveComputationApplication {
 @RequiredArgsConstructor
 class MyController {
 
-  private final StringLengthComputationManager stringLengthComputationManager;
+  private final StringLengthAsyncCache manager = new StringLengthAsyncCache();
 
   private final AtomicInteger nbRequests = new AtomicInteger(0);
 
   @GetMapping("{text}")
   public Integer getValue(@PathVariable("text") String text) {
     nbRequests.incrementAndGet();
-    return stringLengthComputationManager.performExpensiveComputation(() -> theActualComputation(text), text);
-//                .doOnNext(i -> System.out.printf("next result: %d%n", i));
+    return manager.compute(text, () -> theActualComputation(text));
   }
 
   @GetMapping("count")
@@ -62,18 +57,16 @@ class MyController {
 
 }
 
-@Component
-class StringLengthComputationManager extends AbstractExpensiveComputationManager<String, Integer> {
+class StringLengthAsyncCache extends AbstractAsyncCache<String, Integer> {
 }
 
 @Slf4j
-abstract class AbstractExpensiveComputationManager<S, T> {
-  private final ConcurrentMap<S, ComputationSubscriber<T>> computationMap = new ConcurrentHashMap<>();
+abstract class AbstractAsyncCache<S, T> {
+  private final ConcurrentMap<S, CompletableFuture<T>> computationMap = new ConcurrentHashMap<>();
 
-  public T compute(Supplier<T> expensiveComputation, S key) {
+  public T compute(S key, Supplier<T> expensiveComputation) {
     return computationMap
-        .compute(key, (k, v) -> ofNullable(v)
-            .orElseGet(() -> supplyAsync(expensiveComputation)))
+        .computeIfAbsent(key, k -> supplyAsync(expensiveComputation))
         .exceptionally(throwable -> {
           throw new RuntimeException(throwable);
         })
