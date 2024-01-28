@@ -15,7 +15,7 @@ Trigger virtual threads on/off via property
 
 Using JMeter test with Custom Thread Groups plugin
 
-- 4 seconds long task
+- 4 seconds long task using Thread.sleep() to simulate an I/O bound task
 - 1000 concurrent client threads
 - 10 seconds ramp-up time
 - all requesting the expensive computation endpoint
